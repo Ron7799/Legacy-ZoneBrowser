@@ -12,11 +12,19 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 
+// =====================
+// Middleware
+// =====================
+
 app.use(express.json());
+app.use(express.urlencoded({
+    extended: true
+}));
+
 
 app.use(session({
 
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || "secret-key",
 
     resave: false,
 
@@ -26,9 +34,13 @@ app.use(session({
 
 
 app.use(passport.initialize());
-
 app.use(passport.session());
 
+
+
+// =====================
+// Passport Discord
+// =====================
 
 
 passport.serializeUser((user, done)=>{
@@ -54,7 +66,9 @@ passport.use(new DiscordStrategy({
 
     callbackURL: config.callbackURL,
 
-    scope: ["identify"]
+    scope: [
+        "identify"
+    ]
 
 },
 
@@ -68,47 +82,207 @@ passport.use(new DiscordStrategy({
 }));
 
 
-// מציג קבצי HTML מאותה תיקייה
+
+// קבצי האתר
+
 app.use(express.static(__dirname));
 
 
 
+// =====================
+// Database
+// =====================
+
 const database = "./database.json";
 
-
-
-// קריאת מסד נתונים
 
 function getData(){
 
     return JSON.parse(
-        fs.readFileSync(database, "utf8")
+        fs.readFileSync(database,"utf8")
     );
 
 }
 
 
-
-// שמירת מסד נתונים
 
 function saveData(data){
 
     fs.writeFileSync(
         database,
-        JSON.stringify(data, null, 2)
+        JSON.stringify(data,null,2)
     );
 
 }
 
 
 
+// =====================
+// Admin Check
+// =====================
 
-// יצירת אירוע
 
-app.post("/api/events", (req,res)=>{
+function isAdmin(req){
+
+    if(!req.user){
+        return false;
+    }
 
 
-    console.log("📅 התקבל אירוע");
+    return config.admins.includes(
+        req.user.id
+    );
+
+}
+
+// =====================
+// Discord Login
+// =====================
+
+
+app.get("/auth/discord",
+passport.authenticate("discord"));
+
+
+
+app.get("/auth/discord/callback",
+
+passport.authenticate("discord",{
+
+    failureRedirect:"/login.html"
+
+}),
+
+(req,res)=>{
+
+    res.redirect("/admin.html");
+
+});
+
+
+
+// =====================
+// Admin API
+// =====================
+
+
+app.get("/api/check-admin",(req,res)=>{
+
+
+    res.json({
+
+        admin:isAdmin(req),
+
+        id:req.user ? req.user.id : null
+
+    });
+
+
+});
+
+
+
+
+// פרטי משתמש
+
+app.get("/api/user",(req,res)=>{
+
+
+    if(!req.user){
+
+        return res.json({
+
+            loggedIn:false
+
+        });
+
+    }
+
+
+    res.json({
+
+        loggedIn:true,
+
+        id:req.user.id,
+
+        username:req.user.username,
+
+        avatar:req.user.avatar
+
+    });
+
+
+});
+
+
+
+
+// כניסה לפאנל מוגן
+
+app.get("/admin",(req,res)=>{
+
+
+    if(!isAdmin(req)){
+
+        return res.redirect("/login.html");
+
+    }
+
+
+    res.sendFile(
+        __dirname + "/admin.html"
+    );
+
+
+});
+
+
+
+
+// Logout
+
+app.get("/logout",(req,res)=>{
+
+
+    req.logout(()=>{
+
+
+        req.session.destroy(()=>{
+
+
+            res.redirect("/login.html");
+
+
+        });
+
+
+    });
+
+
+});
+
+
+
+// =====================
+// EVENTS
+// =====================
+
+
+
+app.post("/api/events",(req,res)=>{
+
+
+    if(!isAdmin(req)){
+
+        return res.status(403).json({
+
+            success:false,
+
+            message:"אין הרשאה"
+
+        });
+
+    }
 
 
 
@@ -119,25 +293,25 @@ app.post("/api/events", (req,res)=>{
     const event = {
 
 
-        id: Date.now(),
+        id:Date.now(),
 
 
-        title: req.body.title,
+        title:req.body.title,
 
 
-        date: req.body.date,
+        date:req.body.date,
 
 
-        time: req.body.time,
+        time:req.body.time,
 
 
-        location: req.body.location,
+        location:req.body.location,
 
 
-        prize: req.body.prize,
+        prize:req.body.prize,
 
 
-        description: req.body.description
+        description:req.body.description
 
 
     };
@@ -149,10 +323,6 @@ app.post("/api/events", (req,res)=>{
 
 
     saveData(data);
-
-
-
-    console.log(event);
 
 
 
@@ -169,8 +339,6 @@ app.post("/api/events", (req,res)=>{
 
 
 
-// שליפת אירועים
-
 app.get("/api/events",(req,res)=>{
 
 
@@ -182,38 +350,78 @@ app.get("/api/events",(req,res)=>{
 
 });
 
-// מחיקת אירוע
 
-app.delete("/api/events/:id", (req, res) => {
+
+
+app.delete("/api/events/:id",(req,res)=>{
+
+
+    if(!isAdmin(req)){
+
+        return res.status(403).json({
+
+            success:false
+
+        });
+
+    }
+
+
 
     const id = Number(req.params.id);
+
+
 
     const data = getData();
 
 
-    data.events = data.events.filter(event => event.id !== id);
+
+    data.events =
+    data.events.filter(
+        event=>event.id !== id
+    );
+
 
 
     saveData(data);
 
 
-    console.log("🗑️ אירוע נמחק:", id);
-
 
     res.json({
-        success: true
+
+        success:true
+
     });
+
 
 });
 
-// יצירת עדכון חדש
+// =====================
+// UPDATES
+// =====================
+
 
 app.post("/api/updates",(req,res)=>{
+
+
+    if(!isAdmin(req)){
+
+        return res.status(403).json({
+
+            success:false,
+
+            message:"אין הרשאה"
+
+        });
+
+    }
+
 
 
     const {
 
         title,
+
         message
 
     } = req.body;
@@ -238,23 +446,20 @@ app.post("/api/updates",(req,res)=>{
 
     data.updates.push({
 
-        id: Date.now(),
+        id:Date.now(),
 
         title:title,
 
         message:message,
 
-        date:new Date().toLocaleDateString("he-IL")
+        date:new Date()
+        .toLocaleDateString("he-IL")
 
     });
 
 
 
     saveData(data);
-
-
-
-    console.log("📢 עדכון חדש:", title);
 
 
 
@@ -270,7 +475,6 @@ app.post("/api/updates",(req,res)=>{
 
 
 
-// קבלת עדכונים
 
 app.get("/api/updates",(req,res)=>{
 
@@ -286,27 +490,38 @@ app.get("/api/updates",(req,res)=>{
 
 
 
-// מחיקת עדכון
 
 app.delete("/api/updates/:id",(req,res)=>{
 
 
+    if(!isAdmin(req)){
+
+        return res.status(403).json({
+
+            success:false
+
+        });
+
+    }
+
+
+
     const id = Number(req.params.id);
+
 
 
     const data = getData();
 
 
 
-    data.updates = data.updates.filter(update => update.id !== id);
+    data.updates =
+    data.updates.filter(
+        update=>update.id !== id
+    );
 
 
 
     saveData(data);
-
-
-
-    console.log("🗑️ עדכון נמחק:", id);
 
 
 
@@ -319,128 +534,18 @@ app.delete("/api/updates/:id",(req,res)=>{
 
 });
 
-// התחברות עם Discord
-
-app.get("/auth/discord",
-
-passport.authenticate("discord"));
 
 
+// =====================
+// START SERVER
+// =====================
 
-
-// חזרה מדיסקורד
-
-app.get("/auth/discord/callback",
-
-passport.authenticate("discord",{
-
-    failureRedirect:"/login.html"
-
-}),
-
-(req,res)=>{
-
-    res.redirect("/admin.html");
-
-});
-
-
-
-
-// בדיקת הרשאת מנהל
-
-app.get("/api/check-admin",(req,res)=>{
-
-
-    if(!req.user){
-
-        return res.json({
-
-            admin:false
-
-        });
-
-    }
-
-
-
-    const isAdmin =
-    config.admins.includes(req.user.id);
-
-
-
-    res.json({
-
-        admin:isAdmin,
-
-        id:req.user.id
-
-    });
-
-
-});
-
-app.get("/admin",(req,res)=>{
-
-
-    if(!req.user){
-
-        return res.redirect("/login.html");
-
-    }
-
-
-    const isAdmin =
-    config.admins.includes(req.user.id);
-
-
-
-    if(!isAdmin){
-
-        return res.send("אין לך הרשאה");
-
-    }
-
-
-    res.sendFile(__dirname + "/admin.html");
-
-
-});
-
-app.get("/admin", (req,res)=>{
-    res.sendFile(__dirname + "/admin.html");
-});
-
-app.get("/api/user", (req, res) => {
-    if (!req.user) {
-        return res.json({ loggedIn: false });
-    }
-
-    res.json({
-        loggedIn: true,
-        id: req.user.id,
-        username: req.user.username,
-        avatar: req.user.avatar
-    });
-});
-
-app.listen(PORT,()=>{
-    console.log(`🚀 Server started on port ${PORT}`);
-});
-
-app.get("/logout", (req, res) => {
-    req.logout(() => {
-        req.session.destroy(() => {
-            res.redirect("/login.html");
-        });
-    });
-});
 
 app.listen(PORT,()=>{
 
 
     console.log(
-        `🚀 האתר עובד בכתובת http://localhost:3000/${PORT}`
+        `🚀 Server running on port ${PORT}`
     );
 
 
