@@ -9,14 +9,14 @@ const config = require("./config");
 
 const app = express();
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 
 app.use(express.json());
 
 app.use(session({
 
-    secret: "secret-key-change-this",
+    secret: process.env.SESSION_SECRET,
 
     resave: false,
 
@@ -405,6 +405,35 @@ app.get("/admin",(req,res)=>{
     res.sendFile(__dirname + "/admin.html");
 
 
+});
+
+app.get("/admin", (req,res)=>{
+    res.sendFile(__dirname + "/admin.html");
+});
+
+app.get("/api/user", (req, res) => {
+    if (!req.user) {
+        return res.json({ loggedIn: false });
+    }
+
+    res.json({
+        loggedIn: true,
+        id: req.user.id,
+        username: req.user.username,
+        avatar: req.user.avatar
+    });
+});
+
+app.listen(PORT,()=>{
+    console.log(`🚀 Server started on port ${PORT}`);
+});
+
+app.get("/logout", (req, res) => {
+    req.logout(() => {
+        req.session.destroy(() => {
+            res.redirect("/login.html");
+        });
+    });
 });
 
 app.listen(PORT,()=>{

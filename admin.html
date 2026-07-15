@@ -18,7 +18,7 @@
 
     <script>
 
-fetch("/.netlify/functions/check-admin")
+fetch("/api/check-admin")
 .then(res=>res.json())
 .then(data=>{
 
@@ -203,7 +203,7 @@ placeholder="תוכן העדכון">
 async function checkAdmin(){
 
 
-    const response = await await fetch("/.netlify/functions/events", {
+    const response = await fetch("/api/check-admin", {
     })
 
 
@@ -364,13 +364,9 @@ async function deleteEvent(id){
 
 
 
-    await fetch(`/.netlify/functions/events?id=${id}`,{
-
-        method:"DELETE"
-
-    });
-
-
+    await fetch(`/api/events/${id}`, {
+    method: "DELETE"
+});
 
     alert("האירוע נמחק");
 
@@ -402,7 +398,7 @@ async function sendUpdate(){
 
 
 
-    const response = await fetch("/.netlify/functions/updates", {
+    const response = await fetch("/api/updates", {
 
 
         method:"POST",
@@ -518,13 +514,9 @@ async function deleteUpdate(id){
 
 
 
-    await fetch(`/.netlify/functions/updates?id=${id}`,{
-
-
-        method:"DELETE"
-
-
-    });
+await fetch(`/api/updates/${id}`, {
+    method: "DELETE"
+});
 
 
 
